@@ -151,15 +151,14 @@ def get_experiments(configuration):
     db = dataset.connect(database_url)
 
     rows = db.query('SELECT DISTINCT experiment FROM ncfiles '
-                'WHERE configuration = "{configuration}"'.format(configuration=configuration), )
+                    'WHERE configuration = "{configuration}"'.format(configuration=configuration), )
     expts = [row['experiment'] for row in rows]
 
     return expts
 
 
 def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
-                   op=None,
-                   time_units=None):
+                    op=None, time_units=None):
     """
     For a given experiment, concatenate together variable over all time
     given a basename ncfile.

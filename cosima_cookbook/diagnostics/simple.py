@@ -25,21 +25,43 @@ from ..netcdf_index import get_nc_variable
 # lon range = TODO
 # Transects are along grid lines so will not be purely meridional or zonal
 # if they extend into tripolar cap region.
-transects =
-{
-    'DrakePassage': [],
-    'Lombok': [],
-    'Ombai': [],
-    'Timor': [],
-    'Bering': []
-    'Denmark': []
-}
+transects = \
+    {
+        'DrakePassage': [],
+        'Lombok': [],
+        'Ombai': [],
+        'Timor': [],
+        'Bering': []
+        'Denmark': []
+    }
 transects['ITF'] = [transects['Lombok'],
                     transects['Ombai'],
                     transects['Timor']]
 
 
-@memory.cache
+def nearest_grid(point):
+    """
+    Find nearest point in horizontal grid.
+
+    Parameters
+    ----------
+    point : tuple
+        Geographic point, either (lat, lon) in degrees
+        or (lat, lon, depth) in degrees and meters (negative downward)
+
+    Returns
+    -------
+    tuple
+        Nearest grid indices, either (i, j) or (i, j, k)
+
+    Raises
+    ------
+    TODO: some sort of range check? or handle this silently?
+
+    """
+
+
+# @memory.cache
 def transport(expt, transect):
     """
     Calculate time series of transport across a transect.
