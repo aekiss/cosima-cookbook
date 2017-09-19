@@ -14,6 +14,7 @@ import distributed
 from distributed.diagnostics.progressbar import progress
 import xarray as xr
 import subprocess
+import sys
 
 directoriesToSearch = ['/g/data3/hh5/tmp/cosima/',
                        '/g/data1/v45/APE-MOM',
@@ -22,6 +23,7 @@ directoriesToSearch = ['/g/data3/hh5/tmp/cosima/',
 cosima_cookbook_dir = '/g/data1/v45/cosima-cookbook'
 database_file = '{}/cosima-cookbook.db'.format(cosima_cookbook_dir)
 database_url = 'sqlite:///{}'.format(database_file)
+
 
 def build_index():
     """
@@ -44,13 +46,15 @@ def build_index():
     ncfiles = []
     for directoryToSearch in directoriesToSearch:
         print('Searching {}'.format(directoryToSearch))
-        results = subprocess.check_output(['find', directoryToSearch, '-name', '*.nc'])
+        results = subprocess.check_output(['find',
+                                           directoryToSearch, '-name', '*.nc'])
         results = [s for s in results.decode('utf-8').split()]
         ncfiles.extend(results)
 
     print('Found {} .nc files'.format(len(ncfiles)))
 
-    # We can persist this index by storing it in a sqlite database placed in a centrally available location.
+    # We can persist this index by storing it in a sqlite database placed in a
+    # centrally available location.
 
     # The use of the `dataset` module hides the details of working with SQL directly.
     # In this database is a single table listing all variables in NetCDF4 seen previously.
@@ -75,7 +79,8 @@ def build_index():
 
     # determine general pattern for ncfile names
     find_basename_pattern = re.compile('(?P<root>[^\d]+)(?P<index>__\d+_\d+)?(?P<indexice>\.\d+\-\d+)?(?P<ext>\.nc)')
-    
+
+
     def index_variables(ncfile):
 
         matched = find_output.match(ncfile)
@@ -84,14 +89,14 @@ def build_index():
 
         if not os.path.exists(ncfile):
             return []
-        
+
         basename = os.path.basename(ncfile)
         m = find_basename_pattern.match(basename)
         if m is None:
             basename_pattern = basename
-        else: 
+        else:
             basename_pattern = m.group('root') + ('__\d+_\d+' if m.group('index') else '') + ('.\d+-\d+' if m.group('indexice') else '')+ m.group('ext')
-    
+
         try:
             with netCDF4.Dataset(ncfile) as ds:
                 ncvars = [ {'ncfile': ncfile,
@@ -106,20 +111,21 @@ def build_index():
                    'chunking' : str(v.chunking()),
                    } for v in ds.variables.values()]
         except:
-            print ('Exception occurred while trying to read {}'.format(ncfile))
+            print(sys.exc_info()[0],
+                  'Exception occurred while trying to read {}'.format(ncfile))
             ncvars = []
 
         return ncvars
 
     print('Indexing new .nc files...')
-    
+
     with distributed.Client() as client:
         bag = dask.bag.from_sequence(files_to_add)
         bag = bag.map(index_variables).flatten()
-    
+
         futures = client.compute(bag)
         progress(futures, notebook=False)
-        
+
         ncvars = futures.result()
 
     print('')
@@ -132,17 +138,24 @@ def build_index():
 
     return True
 
+
 def get_experiments(configuration):
     """
     Returns list of all experiments for the given configuration
+
+    Parameters
+    ----------
+    configuration : str
+        Configuration name.
     """
     db = dataset.connect(database_url)
-    
+
     rows = db.query('SELECT DISTINCT experiment FROM ncfiles '
                 'WHERE configuration = "{configuration}"'.format(configuration=configuration), )
     expts = [row['experiment'] for row in rows]
-    
+
     return expts
+
 
 def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
                    op=None,
@@ -223,13 +236,14 @@ def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
 
     return dataarray
 
+
 def get_scalar_variables(configuration):
     db = dataset.connect(database_url)
-    
+
     rows = db.query('SELECT DISTINCT variable FROM ncfiles '
          'WHERE basename = "ocean_scalar.nc" '
          'AND dimensions = "(\'time\', \'scalar_axis\')" '
          'AND configuration = "{configuration}"'.format(configuration=configuration))
     variables = [row['variable'] for row in rows]
-    
+
     return variables
