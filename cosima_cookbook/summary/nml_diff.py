@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-General-purpose tools to read, superset and diff namelist files.
+General-purpose tools to read, superset and diff Fortran namelist files.
 
 Andrew Kiss https://github.com/aekiss
 """
@@ -35,6 +35,7 @@ def nmldict(nmlfnames):
     for nml in nmlfnames:
         if os.path.exists(nml):
             nmlall[nml] = f90nml.read(nml)
+        # TODO: raise error if file not found?
     return nmlall
 
 
@@ -152,7 +153,7 @@ def strnmldict(nmlall, format=''):
 
     Returns
     -------
-    str
+    string
         String representaion of nmlall.
         Default lists alphabetically by group, member, then dict key,
         with undefined namelist members shown as blank.
@@ -161,38 +162,42 @@ def strnmldict(nmlall, format=''):
     nmldss = superset(nmlall)
     fnames = list(nmlall.keys())
     fnames.sort()
-    fnmaxlen = max(len(f) for f in fnames)
-    grmaxlen = max(len(g) for g in nmldss)
+    fnmaxlen = max((len(f) for f in fnames), default=0)
+    grmaxlen = max((len(g) for g in nmldss), default=0)
     colwidth = max(fnmaxlen+4, grmaxlen)
-    str = ''
-    if format.lower() in ['md', 'markdown']:
-        str += '| ' + 'File'.ljust(fnmaxlen) + ' | '
-        nmem = 0
-        for group in sorted(nmldss):
-            for mem in sorted(nmldss[group]):
-                str += '&' + group + '<br>' + mem + ' | '
-                nmem += 1
-        str += '\n|-' + '-' * fnmaxlen + ':|' + '--:|' * nmem
-        for fn in fnames:
-            str += '\n| ' + fn + ' | '
+    # TODO: would be faster & more efficient to .append a list of strings
+    # and then join them:
+    # http://docs.python-guide.org/en/latest/writing/structure/#mutable-and-immutable-types
+    st = ''
+    if format.lower() in ('md', 'markdown'):
+        if len(nmldss) > 0:
+            st += '| ' + 'File'.ljust(fnmaxlen) + ' | '
+            nmem = 0
             for group in sorted(nmldss):
                 for mem in sorted(nmldss[group]):
-                    if group in nmlall[fn]:
-                        if mem in nmlall[fn][group]:
-                            str += repr(nmlall[fn][group][mem])
-                    str += ' | '
+                    st += '&' + group + '<br>' + mem + ' | '
+                    nmem += 1
+            st += '\n|-' + '-' * fnmaxlen + ':|' + '--:|' * nmem
+            for fn in fnames:
+                st += '\n| ' + fn + ' | '
+                for group in sorted(nmldss):
+                    for mem in sorted(nmldss[group]):
+                        if group in nmlall[fn]:
+                            if mem in nmlall[fn][group]:
+                                st += repr(nmlall[fn][group][mem])
+                        st += ' | '
     else:
         for group in sorted(nmldss):
             for mem in sorted(nmldss[group]):
-                str += '&{}{}\n'.format(group.ljust(colwidth+2), mem)
+                st += '&{}{}\n'.format(group.ljust(colwidth+2), mem)
                 for fn in fnames:
-                    str += '    {} : '.format(fn.ljust(colwidth-4))
+                    st += '    {} : '.format(fn.ljust(colwidth-4))
                     if group in nmlall[fn]:
                         if mem in nmlall[fn][group]:
-                            str += repr(nmlall[fn][group][mem])
-                    str += '\n'
-                str += '\n'
-    return str
+                            st += repr(nmlall[fn][group][mem])
+                    st += '\n'
+                st += '\n'
+    return st
 
 
 if __name__ == '__main__':
