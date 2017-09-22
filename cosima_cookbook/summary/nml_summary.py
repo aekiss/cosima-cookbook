@@ -11,11 +11,17 @@ Andrew Kiss https://github.com/aekiss
 
 
 # import cosima_cookbook as cc
-from nml_diff import nmldiff, nmldict, superset, strnmldict
-# from .nml_diff import nmldiff, nmldict, superset, strnmldict
+# from nml_diff import nmldiff, nmldict, superset, strnmldict
+from .nml_diff import nmldiff, nmldict, superset, strnmldict
 # from IPython.display import display, Markdown
 import IPython.display
 import os
+
+
+def nmldiff_md(files):
+    IPython.display.display(IPython.display.Markdown(
+        strnmldict(nmldiff(nmldict(files)), format='md')))
+    return
 
 
 def summary_md(configuration, expts, path='/g/data3/hh5/tmp/cosima/',
