@@ -35,7 +35,7 @@ def nmldict(nmlfnames):
     for nml in nmlfnames:
         if os.path.exists(nml):
             nmlall[nml] = f90nml.read(nml)
-        # TODO: raise error if file not found?
+        # TODO: raise error if file not found or not a readable namelist
     return nmlall
 
 
@@ -162,22 +162,20 @@ def strnmldict(nmlall, format=''):
     nmldss = superset(nmlall)
     fnames = list(nmlall.keys())
     fnames.sort()
-    fnmaxlen = max((len(f) for f in fnames), default=0)
-    grmaxlen = max((len(g) for g in nmldss), default=0)
-    colwidth = max(fnmaxlen+4, grmaxlen)
+    colwidth = max((len(f) for f in fnames), default=0)
     # TODO: would be faster & more efficient to .append a list of strings
     # and then join them:
     # http://docs.python-guide.org/en/latest/writing/structure/#mutable-and-immutable-types
     st = ''
     if format.lower() in ('md', 'markdown'):
         if len(nmldss) > 0:
-            st += '| ' + 'File'.ljust(fnmaxlen) + ' | '
+            st += '| ' + 'File'.ljust(colwidth) + ' | '
             nmem = 0
             for group in sorted(nmldss):
                 for mem in sorted(nmldss[group]):
                     st += '&' + group + '<br>' + mem + ' | '
                     nmem += 1
-            st += '\n|-' + '-' * fnmaxlen + ':|' + '--:|' * nmem
+            st += '\n|-' + '-' * colwidth + ':|' + '--:|' * nmem
             for fn in fnames:
                 st += '\n| ' + fn + ' | '
                 for group in sorted(nmldss):
@@ -189,14 +187,14 @@ def strnmldict(nmlall, format=''):
     else:
         for group in sorted(nmldss):
             for mem in sorted(nmldss[group]):
-                st += '&{}{}\n'.format(group.ljust(colwidth+2), mem)
+                st += ' ' * (colwidth + 2) + '&{}\n'.format(group)
+                st += ' ' * (colwidth + 2) + ' {}\n'.format(mem)
                 for fn in fnames:
-                    st += '    {} : '.format(fn.ljust(colwidth-4))
+                    st += '{} : '.format(fn.ljust(colwidth))
                     if group in nmlall[fn]:
                         if mem in nmlall[fn][group]:
                             st += repr(nmlall[fn][group][mem])
                     st += '\n'
-                st += '\n'
     return st
 
 

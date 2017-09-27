@@ -21,7 +21,7 @@ import os
 def nmldiff_md(files):
     IPython.display.display(IPython.display.Markdown(
         strnmldict(nmldiff(nmldict(files)), format='md')))
-    return
+    return None
 
 
 def summary_md(configuration, expts, path='/g/data3/hh5/tmp/cosima/',
@@ -72,7 +72,7 @@ def summary_md(configuration, expts, path='/g/data3/hh5/tmp/cosima/',
 #                                 mdstr = mdstr + repr(nmld[e][group][mem])
 #                         mdstr = mdstr + ' | '
 #             display(Markdown(mdstr))
-    return
+    return None
 
 
 # TODO: get this CLI bit working
