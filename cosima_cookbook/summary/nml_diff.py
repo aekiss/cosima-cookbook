@@ -1,42 +1,63 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""
+General-purpose tools to read, superset and diff Fortran namelist files.
 
-# Tools to read a set of namelist files and find their superset and difference.
-# The functions are general-purpose (i.e. no ACCESS-OM2-related assumptions).
-# Andrew Kiss https://github.com/aekiss
+Andrew Kiss https://github.com/aekiss
+"""
 
-
-import f90nml  # from http://f90nml.readthedocs.io/en/latest/
+import f90nml  # from http://f90nml.readthedocs.io
 import os
 
 
 def nmldict(nmlfnames):
-    """Return dict of the groups/group members of multiple
-        FORTRAN namelist files.
-
-    Input: tuple of any number of namelist file path strings
-            (non-existent files are silently ignored)
-    Output: dict with key:value pairs where
-            key is filename path string
-            value is complete Namelist from filename
     """
+    Return dict of the groups/group members of multiple Fortran namelist files.
+
+    Parameters
+    ----------
+    nmlfnames : str, tuple or list
+        string, or tuple or list of any number of namelist file path strings.
+        Missing, repeated, or non-namelist files are silently ignored.
+
+    Returns
+    -------
+    dict
+        dict with `key`:`value` pairs where
+        `key` is filename path string
+        `value` is complete Namelist from filename as returned by f90nml.read
+
+    """
+    if isinstance(nmlfnames, str):
+        nmlfnames = [nmlfnames]
     nmlfnames = set(nmlfnames)  # remove any duplicates from nmlfnames
 
-    nmlall = {}  # dict keys are nml paths, values are Namelist dicts
+    nmlall = {}  # dict keys are nml paths, values are Namelist dicts # TODO: use OrderedDict to retain file order
     for nml in nmlfnames:
         if os.path.exists(nml):
             nmlall[nml] = f90nml.read(nml)
+        # TODO: raise error if file not found or not a readable namelist
     return nmlall
 
 
 def superset(nmlall):
-    """Return dict of groups/group members present in any of the input Namelists.
+    """
+    Return dict of groups/group members present in any of the input Namelists.
 
-    Input: dict with key:value pairs where
-            key is arbitrary (typically a filename string)
-            value is Namelist (typically from filename)
-    Output: dict with key:value pairs where
-        key is group name (including all groups present in any input Namelist)
-        value is Namelist for group (with nothing common to all other files)
+    Parameters
+    ----------
+    nmlall : dict
+        dict (e.g. returned by nmldict) with `key`:`value` pairs where
+        `key` is arbitrary (typically a filename string)
+        `value` is Namelist (typically from filename via f90nml.read)
+
+    Returns
+    -------
+    dict
+        dict with `key`:`value` pairs where
+        `key` is group name (including all groups present in any input Namelist)
+        `value` is Namelist for group (including every member present in this
+            group in any input Namelist)
+
     """
     nmlsuperset = {}
     for nml in nmlall:
@@ -53,21 +74,29 @@ def superset(nmlall):
 
 
 def nmldiff(nmlall):
-    """Remove every group/group member that is the same in all file Namelists.
-
-    Input: dict (e.g. returned by nmldict) with key:value pairs where
-            key is filename path string
-            value is complete Namelist from filename
-    Output: modified input dict with key:value pairs where
-            key is filename strings
-            value is Namelist from filename, with any group/group member
-                common to all other files removed
     """
+    Remove every group/group member that is the same in all file Namelists.
 
+    Parameters
+    ----------
+    nmlall : dict
+        dict (e.g. returned by nmldict) with `key`:`value` pairs where
+        `key` is arbitrary (typically a filename path string)
+        `value` is Namelist (typically from filename via f90nml.read)
+
+    Returns
+    -------
+    dict
+        Modified input dict with `key`:`value` pairs where
+        `key` is arbitrary (typically a filename path string)
+        `value` is Namelist from nmlall, with any group/group member
+                common to all other keys (i.e. files) in input removed
+
+    """
 # Create diff by removing common groups/members from nmlall.
 # This is complicated by the fact group names / member names may differ
 # or be absent across different nml files.
-
+#
 # First make a superset that has all group names and group members that
 # appear in any nml file
     nmlsuperset = superset(nmlall)
@@ -105,3 +134,90 @@ def nmldiff(nmlall):
                 for nml in nmlall:
                     del nmlall[nml][group]
     return nmlall
+
+
+def strnmldict(nmlall, format=''):
+    """
+    Return string representation of dict of Namelists.
+
+    Parameters
+    ----------
+    nmlall : dict
+        dict (e.g. returned by nmldict) with `key`:`value` pairs where
+        `key` is arbitrary (typically a filename path string)
+        `value` is Namelist (typically from filename via f90nml.read)
+
+    format : str, optional, case insensitive
+        'md' or 'markdown': github Markdown string output
+        anything else: standard string output
+
+    Returns
+    -------
+    string
+        String representaion of nmlall.
+        Default lists alphabetically by group, member, then dict key,
+        with undefined namelist members shown as blank.
+
+    """
+    # TODO: put data format in Fortran syntax eg for booleans and arrays - does nf90nml do this?
+    #    - see f90repr in namelist.py: https://github.com/marshallward/f90nml/blob/master/f90nml/namelist.py#L405
+    # TODO: latex output, using longtable and sistyle and \verb (or \_) and \&, and also putting things that differ in bold, and including hook for hyperlinking member names to online documentation
+    nmldss = superset(nmlall)
+    fnames = list(nmlall.keys())
+    fnames.sort()
+    colwidth = max((len(f) for f in fnames), default=0)
+    # TODO: would be faster & more efficient to .append a list of strings
+    # and then join them:
+    # http://docs.python-guide.org/en/latest/writing/structure/#mutable-and-immutable-types
+    st = ''
+    if format.lower() in ('md', 'markdown'):
+        if len(nmldss) > 0:
+            st += '| ' + 'File'.ljust(colwidth) + ' | '
+            nmem = 0
+            for group in sorted(nmldss):
+                for mem in sorted(nmldss[group]):
+                    st += '&' + group + '<br>' + mem + ' | '
+                    nmem += 1
+            st += '\n|-' + '-' * colwidth + ':|' + '--:|' * nmem
+            for fn in fnames:
+                st += '\n| ' + fn + ' | '
+                for group in sorted(nmldss):
+                    for mem in sorted(nmldss[group]):
+                        if group in nmlall[fn]:
+                            if mem in nmlall[fn][group]:
+                                st += repr(nmlall[fn][group][mem])  # TODO: use f90repr
+                        st += ' | '
+    else:
+        for group in sorted(nmldss):
+            for mem in sorted(nmldss[group]):
+                st += ' ' * (colwidth + 2) + '&{}\n'.format(group)
+                st += ' ' * (colwidth + 2) + ' {}\n'.format(mem)
+                for fn in fnames:
+                    st += '{} : '.format(fn.ljust(colwidth))
+                    if group in nmlall[fn]:
+                        if mem in nmlall[fn][group]:
+                            st += repr(nmlall[fn][group][mem])  # TODO: use f90repr
+                    st += '\n'
+    return st
+
+
+if __name__ == '__main__':
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description=
+        'Show semantic differences between multiple Fortran namelist files.\
+        Differences are listed alphabetically by group, member, then filename.\
+        Undefined namelist members are shown as blank.\
+        Missing, repeated, or non-namelist files are silently ignored.\
+        Exit code 0: no differences; 1: differences.')
+    parser.add_argument('file', metavar='file', type=str, nargs='+',
+                        help='Fortran namelist file')
+    args = parser.parse_args()
+    args = vars(args)['file']
+    nmld = nmldiff(nmldict(args))
+    nmldss = superset(nmld)
+    if len(nmldss) == 0:
+        sys.exit(0)
+    else:
+        print(strnmldict(nmld), end='', flush=True)
+        sys.exit(1)
