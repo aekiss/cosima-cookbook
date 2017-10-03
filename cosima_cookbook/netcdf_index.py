@@ -1,6 +1,11 @@
 """
-Common tools for accessing NetCDF4 variables
+Common tools for accessing NetCDF4 variables.
 """
+# TODO: avoid use of db.query with concatenated string as this is vulnerable to sql injection by careless use
+# .... but the only thing at risk is the sql database, which is easily rebuilt...
+# is this any help? http://docs.sqlalchemy.org/en/latest/faq/sqlexpressions.html 
+# should it be constructed via methods rather than using string concat?
+# http://docs.sqlalchemy.org/en/latest/orm/query.html
 
 __all__ = ['build_index', 'get_nc_variable', 'get_experiments']
 
@@ -40,6 +45,8 @@ def build_index():
     .ncfile, varname, dimensions, chunksize
 
     """
+
+# TODO: make build_index warn on unreadable directories rather than failing
 
     # Build index of all NetCDF files found in directories to search.
 
@@ -95,7 +102,7 @@ def build_index():
         if m is None:
             basename_pattern = basename
         else:
-            basename_pattern = m.group('root') + ('__\d+_\d+' if m.group('index') else '') + ('.\d+-\d+' if m.group('indexice') else '')+ m.group('ext')
+            basename_pattern = m.group('root') + ('__\d+_\d+' if m.group('index') else '') + ('.\d+-\d+' if m.group('indexice') else '') + m.group('ext')
 
         try:
             with netCDF4.Dataset(ncfile) as ds:
@@ -151,7 +158,8 @@ def get_experiments(configuration):
     db = dataset.connect(database_url)
 
     rows = db.query('SELECT DISTINCT experiment FROM ncfiles '
-                    'WHERE configuration = "{configuration}"'.format(configuration=configuration), )
+                    'WHERE configuration = "{configuration}"'.
+                    format(configuration=configuration), )
     expts = [row['experiment'] for row in rows]
 
     return expts
@@ -173,10 +181,10 @@ def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
 
     time_units (e.g. "days since 1600-01-01") can be used to override
     the original time.units
-
     """
 
     if '/' in expt:
+        # TODO: make use of configuration?
         configuration, experiment = expt.split('/')
     else:
         experiment = expt
@@ -196,6 +204,7 @@ def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
 
     #print('Found {} ncfiles'.format(len(ncfiles)))
 
+# TODO: avoid use of eval?
     dimensions = eval(rows[0]['dimensions'])
     chunking = eval(rows[0]['chunking'])
 
@@ -214,11 +223,12 @@ def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
         ncfiles = ncfiles[-n:]
 
     if op is None:
-        op = lambda x: x
+        def op(x): return x
+        # op = lambda x: x
 
     b = dask.bag.from_sequence(ncfiles)
-    b = b.map(lambda fn : op(xr.open_dataset(fn, chunks=chunks,
-                                             decode_times=False)[variable]) )
+    b = b.map(lambda fn: op(xr.open_dataset(fn, chunks=chunks,
+                            decode_times=False)[variable]))
 
     dataarrays = b.compute()
 
@@ -228,10 +238,12 @@ def get_nc_variable(expt, ncfile, variable, chunks={}, n=None,
         if time_units is None:
             time_units = dataarray.time.units
 
-        decoded_time = xr.conventions.decode_cf_datetime(dataarray.time, time_units)
+        decoded_time = xr.conventions.\
+            decode_cf_datetime(dataarray.time, time_units)
         dataarray.coords['time'] = ('time', decoded_time,
-                                    {'long_name' : 'time', 'decoded_using' : time_units }
-                                   )
+                                    {'long_name': 'time',
+                                     'decoded_using': time_units}
+                                    )
 
     return dataarray
 
