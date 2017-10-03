@@ -1,3 +1,14 @@
+# TODO: now use xarray .sel( ... , method='nearest')
+#   - note that this isn't needed for slices
+#   - how to extract what index was actually used?
+# see http://xarray.pydata.org/en/stable/indexing.html#nearest-neighbor-lookups
+# and http://xarray.pydata.org/en/stable/generated/xarray.Dataset.sel.html
+
+# TODO: use xarray metadata (data.dims) for dimension names rather than having them hard-coded?
+
+# TODO: handle u,v,t grids carefully for multiple joined transects - depends on B- or C-grid.
+#   - are u,v colocated on B grid? doe that mean there's a half-cell extra bit if 2 transects join at 90deg?
+
 from joblib import Memory
 
 cachedir = None  # TODO: use a persistent cache?
@@ -31,7 +42,7 @@ transects = \
         'Lombok': [],
         'Ombai': [],
         'Timor': [],
-        'Bering': []
+        'Bering': [],
         'Denmark': []
     }
 transects['ITF'] = [transects['Lombok'],
@@ -124,7 +135,10 @@ def zonal_transport(expt, lon, lat):
     tx = get_nc_variable(expt, 'ocean_month.nc', 'tx_trans_int_z',
                          chunks={'yt_ocean': 200},
                          time_units='days since 1900-01-01')
-    tx_trans = tx.sel(xu_ocean=-69).sel(yt_ocean=slice(-72, -52))
+    # TODO: check how 'nearest' works with a non-uniform grid!
+    # how can it select on xu_ocean when nearest also depends on y?
+    tx_trans = tx.sel(xu_ocean=-69, method='nearest')\
+        .sel(yt_ocean=slice(-72, -52))
     if tx_trans.units == 'Sv (10^9 kg/s)':
         transport = tx_trans.sum('yt_ocean').resample('A', 'time')
     else:

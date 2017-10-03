@@ -31,7 +31,7 @@ def nmldict(nmlfnames):
         nmlfnames = [nmlfnames]
     nmlfnames = set(nmlfnames)  # remove any duplicates from nmlfnames
 
-    nmlall = {}  # dict keys are nml paths, values are Namelist dicts
+    nmlall = {}  # dict keys are nml paths, values are Namelist dicts # TODO: use OrderedDict to retain file order
     for nml in nmlfnames:
         if os.path.exists(nml):
             nmlall[nml] = f90nml.read(nml)
@@ -159,6 +159,9 @@ def strnmldict(nmlall, format=''):
         with undefined namelist members shown as blank.
 
     """
+    # TODO: put data format in Fortran syntax eg for booleans and arrays - does nf90nml do this?
+    #    - see f90repr in namelist.py: https://github.com/marshallward/f90nml/blob/master/f90nml/namelist.py#L405
+    # TODO: latex output, using longtable and sistyle and \verb (or \_) and \&, and also putting things that differ in bold, and including hook for hyperlinking member names to online documentation
     nmldss = superset(nmlall)
     fnames = list(nmlall.keys())
     fnames.sort()
@@ -182,7 +185,7 @@ def strnmldict(nmlall, format=''):
                     for mem in sorted(nmldss[group]):
                         if group in nmlall[fn]:
                             if mem in nmlall[fn][group]:
-                                st += repr(nmlall[fn][group][mem])
+                                st += repr(nmlall[fn][group][mem])  # TODO: use f90repr
                         st += ' | '
     else:
         for group in sorted(nmldss):
@@ -193,7 +196,7 @@ def strnmldict(nmlall, format=''):
                     st += '{} : '.format(fn.ljust(colwidth))
                     if group in nmlall[fn]:
                         if mem in nmlall[fn][group]:
-                            st += repr(nmlall[fn][group][mem])
+                            st += repr(nmlall[fn][group][mem])  # TODO: use f90repr
                     st += '\n'
     return st
 
