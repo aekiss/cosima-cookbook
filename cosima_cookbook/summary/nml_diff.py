@@ -6,46 +6,48 @@ Andrew Kiss https://github.com/aekiss
 """
 
 import f90nml  # from http://f90nml.readthedocs.io
-import os
+import textwrap
+import copy
+import warnings
+import collections
 
 
 def nmldict(nmlfnames):
     """
-    Return dict of the groups/group members of multiple Fortran namelist files.
+    Return OrderedDict of the groups and variables in Fortran namelist files.
 
     Parameters
     ----------
     nmlfnames : str, tuple or list
         string, or tuple or list of any number of namelist file path strings.
-        Missing, repeated, or non-namelist files are silently ignored.
+        Repeated files are silently ignored.
 
     Returns
     -------
-    dict
-        dict with `key`:`value` pairs where
-        `key` is filename path string
+    OrderedDict
+        OrderedDict with `key`:`value` pairs where
+        `key` is filename path string (in supplied order)
         `value` is complete Namelist from filename as returned by f90nml.read
 
     """
     if isinstance(nmlfnames, str):
         nmlfnames = [nmlfnames]
-    nmlfnames = set(nmlfnames)  # remove any duplicates from nmlfnames
 
-    nmlall = {}  # dict keys are nml paths, values are Namelist dicts # TODO: use OrderedDict to retain file order
+    nmlall = collections.OrderedDict()  # dict keys are nml paths, values are Namelist dicts
     for nml in nmlfnames:
-        if os.path.exists(nml):
-            nmlall[nml] = f90nml.read(nml)
-        # TODO: raise error if file not found or not a readable namelist
+        nmlall[nml] = f90nml.read(nml)
+        if len(nmlall[nml]) == 0:
+            warnings.warn('{} does not contain any namelist data'.format(nml))
     return nmlall
 
 
 def superset(nmlall):
     """
-    Return dict of groups/group members present in any of the input Namelists.
+    Return dict of groups and variables present in any of the input Namelists.
 
     Parameters
     ----------
-    nmlall : dict
+    nmlall : dict or OrderedDict
         dict (e.g. returned by nmldict) with `key`:`value` pairs where
         `key` is arbitrary (typically a filename string)
         `value` is Namelist (typically from filename via f90nml.read)
@@ -55,7 +57,7 @@ def superset(nmlall):
     dict
         dict with `key`:`value` pairs where
         `key` is group name (including all groups present in any input Namelist)
-        `value` is Namelist for group (including every member present in this
+        `value` is Namelist for group (including every variable present in this
             group in any input Namelist)
 
     """
@@ -75,35 +77,36 @@ def superset(nmlall):
 
 def nmldiff(nmlall):
     """
-    Remove every group/group member that is the same in all file Namelists.
+    In-place remove every group/variable that's the same in all file Namelists.
 
     Parameters
     ----------
-    nmlall : dict
+    nmlall : dict or OrderedDict
         dict (e.g. returned by nmldict) with `key`:`value` pairs where
         `key` is arbitrary (typically a filename path string)
         `value` is Namelist (typically from filename via f90nml.read)
 
     Returns
     -------
-    dict
-        Modified input dict with `key`:`value` pairs where
+    dict or OrderedDict
+        In-place modified input dict with `key`:`value` pairs where
         `key` is arbitrary (typically a filename path string)
-        `value` is Namelist from nmlall, with any group/group member
-                common to all other keys (i.e. files) in input removed
+        `value` is Namelist from nmlall, with any variable
+                common to all other keys (i.e. files) in input removed.
+                Groups whose contents are identical are also removed.
 
     """
-# Create diff by removing common groups/members from nmlall.
-# This is complicated by the fact group names / member names may differ
+# Create diff by removing common groups/variables from nmlall.
+# This is complicated by the fact group names / variable names may differ
 # or be absent across different nml files.
 #
-# First make a superset that has all group names and group members that
+# First make a superset that has all group names and variables that
 # appear in any nml file
     nmlsuperset = superset(nmlall)
 
-    # now go through nmlall and remove any groups / members from nmlall that
+    # now go through nmlall and remove any groups / variables from nmlall that
     #   are identical to superset in all nmls
-    # first delete any group members that are common to all nmls, then delete
+    # first delete any variables that are common to all nmls, then delete
     #   any empty groups common to all nmls
     for group in nmlsuperset:
         # init: whether group is present and identical in all namelist files
@@ -111,22 +114,22 @@ def nmldiff(nmlall):
         for nml in nmlall:
             deletegroup = deletegroup and (group in nmlall[nml])
         if deletegroup:  # group present in all namelist files
-            for mem in nmlsuperset[group]:
-                # init: whether group member is present and identical
+            for var in nmlsuperset[group]:
+                # init: whether variable is present and identical
                 #   in all namelist files
-                deletemem = True
+                deletevar = True
                 for nml in nmlall:
-                    deletemem = deletemem and (mem in nmlall[nml][group])
-                if deletemem:  # group member is present in all namelist files
+                    deletevar = deletevar and (var in nmlall[nml][group])
+                if deletevar:  # variable is present in all namelist files
                     for nml in nmlall:
                         # ... now check if values match in all namelist files
-                        deletemem = deletemem and \
-                            (nmlall[nml][group][mem] ==
-                             nmlsuperset[group][mem])
-                    if deletemem:
+                        deletevar = deletevar and \
+                            (nmlall[nml][group][var] ==
+                             nmlsuperset[group][var])
+                    if deletevar:
                         for nml in nmlall:
-                            # delete mem from this group in all nmls
-                            del nmlall[nml][group][mem]
+                            # delete var from this group in all nmls
+                            del nmlall[nml][group][var]
             for nml in nmlall:
                 deletegroup = deletegroup and (len(nmlall[nml][group]) == 0)
             if deletegroup:
@@ -136,67 +139,172 @@ def nmldiff(nmlall):
     return nmlall
 
 
+def rmcommonprefix(strlist):
+    """
+    Remove common prefix from a list of strings.
+
+    Parameters
+    ----------
+    strlist: list of str
+        non-empty list of strings
+
+    Returns
+    -------
+    strlist: list of str
+        list of strings with common prefix removed
+
+    """
+    i = 0  # needed for strlist of length 1 - python bug workaround?
+    for i in range(0, min(len(s) for s in strlist)):
+        if len(set(ss[i] for ss in strlist)) > 1:
+            i = i - 1
+            break
+    return [s[(i+1):] for s in strlist]
+
+
+def rmcommonsuffix(strlist):
+    """
+    Remove common suffix from a list of strings.
+
+    Parameters
+    ----------
+    strlist: list of str
+        non-empty list of strings
+
+    Returns
+    -------
+    strlist: list of str
+        list of strings with common suffix removed
+
+    """
+    for i in range(1, 1 + min(len(s) for s in strlist)):
+        if len(set(ss[-i] for ss in strlist)) > 1:
+            i = i - 1
+            break
+    if i == 0:
+        return list(strlist)
+    else:
+        return [s[:(-i)] for s in strlist]
+
+
 def strnmldict(nmlall, format=''):
     """
     Return string representation of dict of Namelists.
 
     Parameters
     ----------
-    nmlall : dict
+    nmlall : dict or OrderedDict
         dict (e.g. returned by nmldict) with `key`:`value` pairs where
         `key` is arbitrary (typically a filename path string)
         `value` is Namelist (typically from filename via f90nml.read)
 
     format : str, optional, case insensitive
-        'md' or 'markdown': github Markdown string output
+        'md' or 'markdown': markdown string output
+        'latex': latex string output
         anything else: standard string output
 
     Returns
     -------
     string
         String representaion of nmlall.
-        Default lists alphabetically by group, member, then dict key,
-        with undefined namelist members shown as blank.
+        Default lists alphabetically by group, variable, then dict key,
+        with undefined namelist variables shown as blank.
 
     """
+    def latexstr(item):
+        return item.replace('_', '\\_')
+
+    def latexrepr(item):
+        if isinstance(item, str):
+            return "'" + latexstr(item) + "'"
+        elif isinstance(item, float):
+    # TODO: improve float formatting - eg remove leading 0 in exponent
+            return '\\num*{' + repr(item) + '}{}'
+        elif isinstance(item, list):
+            s = ''
+            for i in item:
+                s += latexrepr(i) + ', '
+            return s[:-2]
+        else:
+            return repr(item)
+
+    # TODO: fail on unknown format
     # TODO: put data format in Fortran syntax eg for booleans and arrays - does nf90nml do this?
     #    - see f90repr in namelist.py: https://github.com/marshallward/f90nml/blob/master/f90nml/namelist.py#L405
-    # TODO: latex output, using longtable and sistyle and \verb (or \_) and \&, and also putting things that differ in bold, and including hook for hyperlinking member names to online documentation
-    nmldss = superset(nmlall)
+    nmlss = superset(nmlall)
+    nmldss = superset(nmldiff(copy.deepcopy(nmlall)))  # avoid in-place modification
     fnames = list(nmlall.keys())
-    fnames.sort()
     colwidth = max((len(f) for f in fnames), default=0)
     # TODO: would be faster & more efficient to .append a list of strings
     # and then join them:
     # http://docs.python-guide.org/en/latest/writing/structure/#mutable-and-immutable-types
     st = ''
     if format.lower() in ('md', 'markdown'):
-        if len(nmldss) > 0:
+        if len(nmlss) > 0:
             st += '| ' + 'File'.ljust(colwidth) + ' | '
-            nmem = 0
-            for group in sorted(nmldss):
-                for mem in sorted(nmldss[group]):
-                    st += '&' + group + '<br>' + mem + ' | '
-                    nmem += 1
-            st += '\n|-' + '-' * colwidth + ':|' + '--:|' * nmem
+            nvar = 0
+            for group in sorted(nmlss):
+                for var in sorted(nmlss[group]):
+                    st += '&' + group + '<br>' + var + ' | '
+                    nvar += 1
+            st += '\n|-' + '-' * colwidth + ':|' + '--:|' * nvar
             for fn in fnames:
                 st += '\n| ' + fn + ' | '
-                for group in sorted(nmldss):
-                    for mem in sorted(nmldss[group]):
+                for group in sorted(nmlss):
+                    for var in sorted(nmlss[group]):
                         if group in nmlall[fn]:
-                            if mem in nmlall[fn][group]:
-                                st += repr(nmlall[fn][group][mem])  # TODO: use f90repr
+                            if var in nmlall[fn][group]:
+                                st += repr(nmlall[fn][group][var])  # TODO: use f90repr
                         st += ' | '
+            st += '\n'
+    elif format.lower() == 'latex':
+        if len(nmlss) > 0:
+            st += textwrap.dedent("""
+            % File auto-generated by nml_diff.py
+            % Requires longtable, array and sistyle packages
+            % Also need to define 'differ' and 'link' commands, e.g.
+            % \\newcommand{\differ}[1]{#1} % plain display
+            % \\newcommand{\differ}[1]{\\textbf{#1}} % bold display
+            % \\definecolor{hilite}{cmyk}{0, 0, 0.9, 0}\\newcommand{\differ}[1]{\\colorbox{hilite}{#1}} % colour highlight (requires color package)
+            % \\newcommand{\\link}[2]{#1} % plain display
+            % \\newcommand{\link}[2]{\href{https://github.com/mom-ocean/MOM5/search?q=#2}{#1}} % link to documentation (requires hyperref package)
+
+            """)
+            st += '\\newcolumntype{R}{>{\\raggedleft\\arraybackslash}p{15ex}}'
+            st += '\\begin{longtable}{l' + 'R' * len(fnames) + '}'
+            st += '\n\\hline\n'
+            st += '\\textbf{Group\\hfill Variable}'
+            for fn in rmcommonprefix(rmcommonsuffix(fnames)):
+                st += '\t & \t\\textbf{' + latexstr(fn) + '}'
+            st += ' \\\\\n\\hline\n'
+            for group in sorted(nmlss):
+                for var in sorted(nmlss[group]):
+                    st1 = '{} \\hfill \\link{{{}}}{{{}}}'.format(
+                        latexstr(group), latexstr(var), var)
+                    if group in nmldss:
+                        if var in nmldss[group]:
+                            st1 = '{} \\hfill \\link{{\\differ{{{}}}}}{{{}}}'.format(
+                                latexstr(group), latexstr(var), var)
+                    st += st1
+                    for fn in fnames:
+                        st += '\t & \t'
+                        if group in nmlall[fn]:
+                            if var in nmlall[fn][group]:
+                                st += latexrepr(nmlall[fn][group][var])  # TODO: use f90repr
+                    st += ' \\\\\n'
+                if len(nmlss[group]) > 0:
+                    st += '\\hline\n'
+            st += '\\end{longtable}\n'
     else:
-        for group in sorted(nmldss):
-            for mem in sorted(nmldss[group]):
+        for group in sorted(nmlss):
+            for var in sorted(nmlss[group]):
                 st += ' ' * (colwidth + 2) + '&{}\n'.format(group)
-                st += ' ' * (colwidth + 2) + ' {}\n'.format(mem)
+                st += ' ' * (colwidth + 2) + ' {}\n'.format(var)
                 for fn in fnames:
                     st += '{} : '.format(fn.ljust(colwidth))
                     if group in nmlall[fn]:
-                        if mem in nmlall[fn][group]:
-                            st += repr(nmlall[fn][group][mem])  # TODO: use f90repr
+                        if var in nmlall[fn][group]:
+                            st += repr(nmlall[fn][group][var])  # TODO: use f90repr
                     st += '\n'
     return st
 
@@ -205,19 +313,33 @@ if __name__ == '__main__':
     import argparse
     import sys
     parser = argparse.ArgumentParser(description=
-        'Show semantic differences between multiple Fortran namelist files.\
-        Differences are listed alphabetically by group, member, then filename.\
-        Undefined namelist members are shown as blank.\
-        Missing, repeated, or non-namelist files are silently ignored.\
-        Exit code 0: no differences; 1: differences.')
+        'Tabulate (and optionally diff) multiple Fortran namelist files.\
+        Undefined namelist variables are shown as blank.\
+        Repeated files are silently ignored.')
+    parser.add_argument('-d', '--diff',
+                        action='store_true', default=False,
+                        help='only show differences (default: show all)')
+    parser.add_argument('-F', '--format', type=str,
+                        metavar='fmt', default='str',
+                        choices=['str', 'md', 'markdown', 'latex'],
+                        help="output format: 'str' (default), 'md', \
+                        'markdown', or 'latex'; \
+                        exit code 0: no differences; 1: differences.")
     parser.add_argument('file', metavar='file', type=str, nargs='+',
                         help='Fortran namelist file')
     args = parser.parse_args()
-    args = vars(args)['file']
-    nmld = nmldiff(nmldict(args))
+    fmt = vars(args)['format']
+    diff = vars(args)['diff']
+    files = vars(args)['file']
+    nmld = nmldict(files)
+    if diff:
+        nmld = nmldiff(nmld)
     nmldss = superset(nmld)
     if len(nmldss) == 0:
         sys.exit(0)
     else:
-        print(strnmldict(nmld), end='', flush=True)
-        sys.exit(1)
+        print(strnmldict(nmld, format=fmt), end='', flush=True)
+        if diff:
+            sys.exit(1)
+        else:
+            sys.exit(0)
