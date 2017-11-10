@@ -1,6 +1,11 @@
 """
-Common tools for accessing NetCDF4 variables
+Common tools for accessing NetCDF4 variables.
 """
+# TODO: avoid use of db.query with concatenated string as this is vulnerable to sql injection by careless use
+# .... but the only thing at risk is the sql database, which is easily rebuilt...
+# is this any help? http://docs.sqlalchemy.org/en/latest/faq/sqlexpressions.html 
+# should it be constructed via methods rather than using string concat?
+# http://docs.sqlalchemy.org/en/latest/orm/query.html
 
 __all__ = ['build_index', 'get_nc_variable',
            'get_experiments', 'get_configurations',
@@ -45,6 +50,8 @@ def build_index(use_bag=False):
 
     """
 
+# TODO: make build_index warn on unreadable directories rather than failing
+
     # Build index of all NetCDF files found in directories to search.
 
     ncfiles = []
@@ -68,7 +75,8 @@ def build_index(use_bag=False):
 #
 #    print('Found {} .nc files'.format(len(ncfiles)))
 
-    # We can persist this index by storing it in a sqlite database placed in a centrally available location.
+    # We can persist this index by storing it in a sqlite database placed in a
+    # centrally available location.
 
     # The use of the `dataset` module hides the details of working with SQL directly.
 
@@ -138,7 +146,7 @@ def build_index(use_bag=False):
         if m is None:
             basename_pattern = basename
         else:
-            basename_pattern = m.group('root') + ('__\d+_\d+' if m.group('index') else '') + ('.\d+-\d+' if m.group('indexice') else '')+ m.group('ext')
+            basename_pattern = m.group('root') + ('__\d+_\d+' if m.group('index') else '') + ('.\d+-\d+' if m.group('indexice') else '') + m.group('ext')
 
         try:
             with netCDF4.Dataset(ncfile) as ds:
@@ -154,7 +162,8 @@ def build_index(use_bag=False):
                    'chunking' : str(v.chunking()),
                    } for v in ds.variables.values()]
         except:
-            print ('Exception occurred while trying to read {}'.format(ncfile))
+            print(sys.exc_info()[0],
+                  'Exception occurred while trying to read {}'.format(ncfile))
             ncvars = []
 
         return ncvars
@@ -205,6 +214,11 @@ def get_configurations():
 def get_experiments(configuration):
     """
     Returns list of all experiments for the given configuration
+
+    Parameters
+    ----------
+    configuration : str
+        Configuration name.
     """
     db = dataset.connect(database_url)
 
@@ -269,6 +283,7 @@ def get_nc_variable(expt, ncfile,
     """
 
     if '/' in expt:
+        # TODO: make use of configuration?
         configuration, experiment = expt.split('/')
     else:
         experiment = expt
@@ -303,6 +318,7 @@ def get_nc_variable(expt, ncfile,
 
     #print('Found {} ncfiles'.format(len(ncfiles)))
 
+# TODO: avoid use of eval?
     dimensions = eval(rows[0]['dimensions'])
     chunking = eval(rows[0]['chunking'])
 
@@ -321,7 +337,8 @@ def get_nc_variable(expt, ncfile,
         ncfiles = ncfiles[-n:]
 
     if op is None:
-        op = lambda x: x
+        def op(x): return x
+        # op = lambda x: x
 
     #print ('Opening {} ncfiles...'.format(len(ncfiles)))
     logging.debug(f'Opening {len(ncfiles)} ncfiles...')
@@ -370,6 +387,7 @@ def get_nc_variable(expt, ncfile,
         return dataarray[variable]
     else:
         return dataarray
+
 
 def get_scalar_variables(configuration):
     db = dataset.connect(database_url)
