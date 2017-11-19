@@ -150,10 +150,12 @@ def zonal_transport(expt, lon, lat):
     xarray
         Time series of zonal transport across meridional section
     """
-    tx = get_nc_variable(expt, 'ocean_month.nc', 'tx_trans_int_z',
+    tx = get_nc_variable(expt,
+                         'ocean_month.nc',
+                         'tx_trans_int_z',
                          chunks={'yt_ocean': 200},
                          time_units='days since 1700-01-01',
-                         use_bag=True)
+                         use_bag=False)
     # TODO: check how 'nearest' works with a non-uniform grid!
     # how can it select on xu_ocean when nearest also depends on y?
     tx_trans = tx.sel(xu_ocean=-69, method='nearest')\
@@ -165,7 +167,7 @@ def zonal_transport(expt, lon, lat):
         transport = tx_trans.sum('yt_ocean').resample('A', 'time')*1.0e-9
 
     transport.load()
-    
+
     return transport
 
 
