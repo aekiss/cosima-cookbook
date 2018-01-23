@@ -8,13 +8,13 @@
 
 # TODO: handle u,v,t grids carefully for multiple joined transects - depends on B- or C-grid.
 #   - are u,v colocated on B grid? doe that mean there's a half-cell extra bit if 2 transects join at 90deg?
+# 
+# from joblib import Memory
+# 
+# cachedir = None  # TODO: use a persistent cache?
+# memory = Memory(cachedir=cachedir, verbose=0)
 
-from joblib import Memory
-
-cachedir = None  # TODO: use a persistent cache?
-memory = Memory(cachedir=cachedir, verbose=0)
-
-from ..netcdf_index import get_nc_variable
+from ..netcdf_index import get_nc_variable, get_variables
 from ..memory import memory
 
 import logging
@@ -207,18 +207,27 @@ def bering_strait(expt):
     return transport
 
 @memory.cache
-def sea_surface_temperature(expt):
-    ## Load SST from expt - last 10 outputs (TODO: would prefer to do this by year)
-    SST = get_nc_variable(expt, 'ocean_month.nc', 'surface_temp',n=10, time_units = 'days since 1900-01-01')
-    #SSS = get_nc_variable(expt, 'ocean.nc', 'temp',n=10,time_units = 'days since 1900-01-01').isel(st_ocean=0)
+def sea_surface_temperature(expt, resolution=1):
+    ## Load SST from expt 
+    varlist = get_variables(expt, 'ocean_month.nc')
+    if 'surface_temp' in varlist:
+        SST = get_nc_variable(expt, 'ocean_month.nc', 'surface_temp',n=10, time_units = 'days since 1700-01-01')
+    else:
+        SST = get_nc_variable(expt, 'ocean.nc', 'temp',n=10,time_units = 'days since 1700-01-01').isel(st_ocean=0)
 
     if SST.units == 'degrees K':
         SST = SST - 273.15
 
     # Annual Average  WOA13 long-term climatology.
-    ## TODO: Need to generalise this to other resolutions!!
-    SST_WOA13 = get_nc_variable('woa13/10', 'woa13_ts_\d+_mom10.nc', 'temp',time_units = 'days since 1900-01-01').isel(ZT=0)
-
+    if resolution==1:
+        SST_WOA13 = get_nc_variable('woa13/10', 'woa13_ts_\d+_mom10.nc', 'temp').isel(ZT=0)
+    elif resolution==0.25:
+        SST_WOA13 = get_nc_variable('woa13/025', 'woa13_ts_\d+_mom025.nc', 'temp').isel(ZT=0)
+    elif resolution==0.1:
+        SST_WOA13 = get_nc_variable('woa13/01', 'woa13_ts_\d+_mom01.nc', 'temp').isel(ZT=0)
+    else:
+        print('WARNING: Sorry, we dont seem to recognise resolution ', resolution)
+    
     # Average
     SST = SST.mean('time')
     SSTdiff = SST - SST_WOA13.mean('time').values
@@ -227,15 +236,24 @@ def sea_surface_temperature(expt):
 
 
 @memory.cache
-def sea_surface_salinity(expt):
-    ## Load SST from expt - last 10 outputs (TODO: would prefer to do this by year)
-    SSS = get_nc_variable(expt, 'ocean_month.nc', 'surface_salt',n=10,time_units = 'days since 1900-01-01')
-    #SSS = get_nc_variable(expt, 'ocean.nc', 'salt',n=10,time_units = 'days since 1900-01-01').isel(st_ocean=0)
+def sea_surface_salinity(expt, resolution=1):
+    ## Load SSS from expt 
+    varlist = get_variables(expt, 'ocean_month.nc')
+    if 'surface_salt' in varlist:
+        SSS = get_nc_variable(expt, 'ocean_month.nc', 'surface_salt',n=10)
+    else:
+        SSS = get_nc_variable(expt, 'ocean.nc', 'salt',n=10).isel(st_ocean=0)
+
 
     # Annual Average  WOA13 long-term climatology.
-    ## TODO: Need to generalise this to other resolutions!!
-    SSS_WOA13 = get_nc_variable('woa13/10', 'woa13_ts_\d+_mom10.nc', 'salt',time_units = 'days since 1900-01-01').isel(ZT=0)
-
+    if resolution==1:
+        SSS_WOA13 = get_nc_variable('woa13/10', 'woa13_ts_\d+_mom10.nc', 'salt').isel(ZT=0)
+    elif resolution==0.25:
+        SSS_WOA13 = get_nc_variable('woa13/025', 'woa13_ts_\d+_mom025.nc', 'salt').isel(ZT=0)
+    elif resolution==0.1:
+        SSS_WOA13 = get_nc_variable('woa13/01', 'woa13_ts_\d+_mom01.nc', 'salt').isel(ZT=0)
+    else:
+        print('WARNING: Sorry, we dont seem to recognise resolution ', resolution)
 
     # Average over last 10 time slices - prefer to do this by year.
     SSS = SSS.mean('time')

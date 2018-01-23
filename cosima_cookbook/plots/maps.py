@@ -13,8 +13,7 @@ from tqdm import tqdm_notebook
 
 import IPython.display
 
-
-def sea_surface_temperature(expts=[]):
+def sea_surface_temperature(expts=[],resolution=1):
     """
     Plot a map of SST from last decade of run.
     """
@@ -25,7 +24,7 @@ def sea_surface_temperature(expts=[]):
     # computing
     results = []
     for expt in tqdm_notebook(expts, leave=False, desc='experiments'):
-        SST, SSTdiff = cc.diagnostics.sea_surface_temperature(expt)
+        SST, SSTdiff = cc.diagnostics.sea_surface_temperature(expt, resolution)
             
         result = {'SST': SST,
                   'SSTdiff': SSTdiff,
@@ -49,7 +48,7 @@ def sea_surface_temperature(expts=[]):
         plt.title(expt)
 
 
-def sea_surface_salinity(expts=[]):
+def sea_surface_salinity(expts=[], resolution=1):
     """
     Plot a map of SSS from last decade of run.
     """
@@ -60,7 +59,7 @@ def sea_surface_salinity(expts=[]):
     # computing
     results = []
     for expt in tqdm_notebook(expts, leave=False, desc='experiments'):
-        SSS, SSSdiff = cc.diagnostics.sea_surface_salinity(expt)
+        SSS, SSSdiff = cc.diagnostics.sea_surface_salinity(expt, resolution)
             
         result = {'SSS': SSS,
                   'SSSdiff': SSSdiff,
